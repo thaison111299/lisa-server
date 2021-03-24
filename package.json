@@ -1,0 +1,43 @@
+{
+  "name": "ndoejs-test",
+  "version": "1.0.0",
+  "description": "",
+  "main": "./src/index.js",
+  "scripts": {
+    "start": "node ./src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "develop": "nodemon ./src/index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.21.1",
+    "body-parser": "^1.19.0",
+    "child_process": "^1.0.2",
+    "cookie-parser": "^1.4.5",
+    "cors": "^2.8.5",
+    "ejs": "^2.7.4",
+    "events": "^3.3.0",
+    "express": "^4.17.1",
+    "express-openid-connect": "^2.3.0",
+    "express-session": "^1.17.1",
+    "fetch": "^1.1.0",
+    "heapdump": "^0.3.15",
+    "http": "0.0.1-security",
+    "http-proxy": "^1.18.1",
+    "js-cookie": "^2.2.1",
+    "jsonfile": "^6.1.0",
+    "moment": "^2.29.1",
+    "mongoose": "^5.12.2",
+    "morgan": "^1.10.0",
+    "node-fetch": "^2.6.1",
+    "node-rtsp-stream": "0.0.3",
+    "passport": "^0.4.1",
+    "passport-openidconnect": "0.0.2",
+    "path": "^0.12.7",
+    "request": "^2.88.2",
+    "serve-favicon": "^2.5.0",
+    "socket.io": "^3.1.2",
+    "util": "^0.12.3"
+  }
+}
