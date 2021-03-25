@@ -4,8 +4,9 @@ const socketio = require('socket.io')
 const cors = require('cors')
 const http = require('http')
 const mongoose = require('mongoose');
-const Message = require('./model/Message')
-const User = require('./model/User')
+const Message = require('./models/Message')
+const User = require('./models/User')
+const Room = require('./models/Room')
 
 const server = http.createServer(app)
 const PORT = process.env.PORT || 1000 // socket.io
@@ -24,12 +25,40 @@ app.use(cors())
 io.on('connection', socket => {
   console.log('New connection:', socket.id)
   // get messages and users
+  socket.on('get-lastroom', async user => {
+    console.log(`${user.name} want to get last room`)
+    let lastRoom = await User.findOne({ email: user.email })
+      .then(userfinded => {
+        console.log(`Get last room of user ${user.name} successfully`)
+        return userfinded.lastRoom
+      })
+      .catch(error => {
+        console.log(`Get last room of user ${user.name} error: ${error.message}`)
+        return null
+      })
+    socket.emit('lastroom', lastRoom)
+  })
+
+  socket.on('get-rooms', user => {
+    console.log(`${user.name} get rooms`)
+    Room.find({}).then(rooms => {
+      let matchRooms = rooms.filter(room => {
+        return room.name.includes(user.nickname)
+      })
+      console.log(`Finded ${matchRooms.length} inboxs match for user: ${user.name} `)
+      socket.emit('rooms', matchRooms)
+    })
+      .catch(error => {
+        console.log(`Find rooms error for user: ${user.name} - ${error.message}`)
+      })
+  })
+
   socket.on('user', user => {
     let { email, name, nickname, picture } = user
     User.findOne({ email: email })
       .then(user => {
         if (!user) {
-          let newUser = { email, name, nickname, picture }
+          let newUser = { email, name, nickname, picture, lastRoom: null }
           new User(newUser).save()
             .then(() => {
               console.log(`Save ${nickname} to db sucessfully`)
@@ -53,7 +82,8 @@ io.on('connection', socket => {
       .catch(error => { })
   })
 
-  socket.on('get-messages', roomName => {
+  // Get message and add new room to roomcollection?
+  socket.on('get-messages', async ({ roomName, user, target }) => {
     console.log(`Some one want to get all messages of room: ${roomName}`)
     // Find 10 latest messages
     Message.find({ room: roomName })
@@ -63,6 +93,44 @@ io.on('connection', socket => {
         socket.emit('messages', messages)
       })
       .catch(error => { })
+
+    // send add to new room part 
+    let room = await Room.findOne({ name: roomName })
+      .then(room => room)
+      .catch(error => null)
+
+    if (!room) {
+      new Room({
+        name: roomName,
+        lastMessage: null,
+        members: [user, target],
+        createdBy: user,
+      }).save()
+        .then(() => {
+          console.log(`Save new room: ${roomName} to db sucessfully`)
+        })
+        .catch(error => {
+          console.log(`Save room: ${roomName} to db fail`)
+        })
+    } else {
+      console.log(`Room ${roomName} has been existed, cant not save!`)
+    }
+
+    // set last room for user is this room
+    User.updateOne({ email: user.email },
+      {
+        "$set": {
+          "lastRoom": room
+        }
+      }
+      , (error, userUpdated) => {
+        if (!error)
+          console.log(`Update ${user.name} successfully`)
+        else
+          console.log(`Update ${user.name} fail`)
+      }
+    )
+
   })
   // socket.join(room)
   //socket.broadcast.to(room).emit('messages', matchRoomMessages)
@@ -79,6 +147,24 @@ io.on('connection', socket => {
       .catch(error => {
         console.log(`Save message to Mongodb error: ${error.message}`)
       })
+
+    // Update last message of that room 
+
+    Room.updateOne({ name: room },
+      {
+        "$set": {
+          "lastMessage": message
+        }
+      }
+      , (error, roomUpdated) => {
+        if (!error)
+          console.log('Update last message sucessfully')
+        else
+          console.log('Update last message fail')
+      }
+    )
+
+
     io.to(room).emit('message', message)
   })
 
