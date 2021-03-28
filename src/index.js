@@ -1,17 +1,18 @@
 const express = require('express')
-const app = express()
+const http = require('http')
 const socketio = require('socket.io')
 const cors = require('cors')
-const http = require('http')
-const mongoose = require('mongoose');
-const Message = require('./models/Message')
+const mongoose = require('mongoose')
 const User = require('./models/User')
-const Room = require('./models/Room')
+const Room = require('./models/Rooms')
+const Message = require('./models/Message')
 
+const app = express()
 const server = http.createServer(app)
+
 const PORT = process.env.PORT || 1000 // socket.io
 
-let origin = 'http://localhost:3000' //'https://lisa-64f51.web.app'
+let origin = 'http://localhost:3000'  //'https://lisa-64f51.web.app'
 
 const io = socketio(server, {
   cors: {
@@ -24,149 +25,142 @@ app.use(cors())
 
 io.on('connection', socket => {
   console.log('New connection:', socket.id)
-  // get messages and users
-  socket.on('get-lastroom', async user => {
-    console.log(`${user.name} want to get last room`)
-    let lastRoom = await User.findOne({ email: user.email })
-      .then(userfinded => {
-        console.log(`Get last room of user ${user.name} successfully`)
-        return userfinded.lastRoom
-      })
-      .catch(error => {
-        console.log(`Get last room of user ${user.name} error: ${error.message}`)
-        return null
-      })
-    socket.emit('lastroom', lastRoom)
+  socket.on('start app', async user => {
+    console.log(`${User.nickname} starts app`)
+    // save user to db
+    let userFound = await User.findOne({ email: user.email }).then(user => user).catch(error => null)
+    if (!userFound)
+      new User(user).save()
+
+    // send all user ib db exept they
+    let usersFound = await User.find({}).then(users => users).catch(error => [])
+    usersFound = usersFound.filter(u => u.email !== user.email)
+    socket.emit('send users', usersFound)
+
+
+    // room 
+    let rooms = await Room.find({}).then(rooms => rooms).catch(error => [])
+    let matchRooms = rooms.filter(room => room.name.includes(user.nickname))
+    socket.emit('rooms', matchRooms)
+
   })
 
-  socket.on('get-rooms', user => {
-    console.log(`${user.name} get rooms`)
-    Room.find({}).then(rooms => {
-      let matchRooms = rooms.filter(room => {
-        return room.name.includes(user.nickname)
-      })
-      console.log(`Finded ${matchRooms.length} inboxs match for user: ${user.name} `)
-      socket.emit('rooms', matchRooms)
+  socket.on('create room', async room => {
+    let roomFound = await Room.findOne({ name: room.name }).then(room => room).catch(error => null)
+    if (!roomFound)
+      new Room(room).save()
+  })
+
+  socket.on('start chat', room => {
+    socket.rooms.forEach(roomName => {
+      if (roomName !== socket.id)
+        socket.leave(roomName)
     })
-      .catch(error => {
-        console.log(`Find rooms error for user: ${user.name} - ${error.message}`)
-      })
+    socket.join(room.name)
+    // give messages
+    // console.log(room)
+    Message.find({ roomName: room.name }).then(messages => {
+      socket.emit('messages', messages)
+    }).catch(err => { })
   })
 
-  socket.on('user', user => {
-    let { email, name, nickname, picture } = user
-    User.findOne({ email: email })
-      .then(user => {
-        if (!user) {
-          let newUser = { email, name, nickname, picture, lastRoom: null }
-          new User(newUser).save()
-            .then(() => {
-              console.log(`Save ${nickname} to db sucessfully`)
-            })
-            .catch(error => {
-              console.log(`Save ${nickname} to db fail`)
-            })
-        } else {
-          console.log(`User ${nickname} has been existed, cant not save!`)
-        }
-      })
-      .catch(error => { })
-    console.log(`User just in: ${nickname}`)
-  })
-
-  socket.on('get-users', () => {
-    User.find({})
-      .then(users => {
-        socket.emit('users', users)
-      })
-      .catch(error => { })
-  })
-
-  // Get message and add new room to roomcollection?
-  socket.on('get-messages', async ({ roomName, user, target }) => {
-    console.log(`Some one want to get all messages of room: ${roomName}`)
-    // Find 10 latest messages
-    Message.find({ room: roomName })
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .then(messages => {
-        socket.emit('messages', messages)
-      })
-      .catch(error => { })
-
-    // send add to new room part 
-    let room = await Room.findOne({ name: roomName })
-      .then(room => room)
-      .catch(error => null)
-
-    if (!room) {
-      new Room({
-        name: roomName,
-        lastMessage: null,
-        members: [user, target],
-        createdBy: user,
-      }).save()
-        .then(() => {
-          console.log(`Save new room: ${roomName} to db sucessfully`)
-        })
-        .catch(error => {
-          console.log(`Save room: ${roomName} to db fail`)
-        })
-    } else {
-      console.log(`Room ${roomName} has been existed, cant not save!`)
-    }
-
-    // set last room for user is this room
-    User.updateOne({ email: user.email },
-      {
-        "$set": {
-          "lastRoom": room
-        }
-      }
-      , (error, userUpdated) => {
-        if (!error)
-          console.log(`Update ${user.name} successfully`)
-        else
-          console.log(`Update ${user.name} fail`)
-      }
-    )
-
-  })
-  // socket.join(room)
-  //socket.broadcast.to(room).emit('messages', matchRoomMessages)
-  // io.to(room).emit('messages', matchRoomMessages)
-  // socket.on('disconnect', () =>
-  // const kitty = new Cat({ name: 'Zildjian' });
-  // kitty.save().then(() => console.log('meow'));
   socket.on('message', message => {
-    let { room, by, text } = message
-    socket.join(room)
-    console.log(`Room: ${room} - ${by.name}: ${text}`)
+    let { roomName } = message
+    io.to(roomName).emit('message', message)
     new Message(message).save()
-      .then(() => console.log('Save message to Mongodb sucessfully'))
-      .catch(error => {
-        console.log(`Save message to Mongodb error: ${error.message}`)
-      })
-
-    // Update last message of that room 
-
-    Room.updateOne({ name: room },
-      {
-        "$set": {
-          "lastMessage": message
-        }
-      }
-      , (error, roomUpdated) => {
-        if (!error)
-          console.log('Update last message sucessfully')
-        else
-          console.log('Update last message fail')
-      }
-    )
-
-
-    io.to(room).emit('message', message)
   })
+
+
+  // socket.on('get inboxs', async user => {
+  //   console.log('Get inboxs')
+  //   let rooms = await User.findOne({ email: user.email })
+  //     .then(user => user.rooms)
+  //     .catch(error => {
+  //       console.log(error.message)
+  //       return []
+  //     })
+  //   let messages = []
+
+  //   for (let room of rooms) {
+  //     let latestMessage = await Message.findOne({ roomName: room.name })
+  //       .sort({ createdAt: -1 }).then(message => message).catch(error => null)
+  //     if (latestMessage) {
+  //       // console.log(latestMessage)
+  //       messages.push(latestMessage)
+  //     }
+  //   }
+  //   socket.emit('inboxs', messages)
+  //   // console.log(messages)
+
+  // })
+
+
+  // // start app thi gui list user 
+  // socket.on('start', user => {
+  //   console.log('Some one start app')
+  //   User.find({})
+  //     .then(users => {
+  //       users = users.filter(guy => guy.email !== user.email)
+  //       socket.emit('users', users)
+  //     })
+  //     .catch(error => { })
+  // })
+
+  // socket.on('login', async user => {
+  //   console.log('some one login')
+  //   let userFound = await User.findOne({ email: user.email })
+  //     .then(user => user).catch(error => null)
+
+  //   if (!userFound) {
+  //     new User(user).save()
+  //       .then(() => {
+  //         User.find({})
+  //           .then(users => {
+  //             console.log(`emitting Users event...`)
+  //             socket.broadcast.emit('users', users)
+  //           })
+  //           .catch(error => { })
+  //       })
+  //       .catch(error => { })
+  //   }
+  // })
+
+  // socket.on('join', roomName => {
+  //   socket.rooms.forEach(roomName => {
+  //     if (roomName !== socket.id) {
+  //       socket.leave(roomName)
+  //     }
+  //   });
+  //   socket.join(roomName)
+  //   Message.find({ roomName: roomName })
+  //     .then(messages => socket.emit('messages', messages))
+  //     .catch(error => { })
+  // })
+
+  // socket.on('update user', async ({ user, room }) => {
+  //   console.log(user.name, room.name)
+  //   let userFound = await User.findOne({ email: user.email })
+  //     .then(user => user)
+  //     .catch(error => null)
+  //   if (!userFound)
+  //     return
+  //   let rooms = userFound.rooms
+  //   let newRooms = rooms.filter(r => r.name !== room.name)
+  //   newRooms = [room, ...newRooms]
+  //   User.updateOne({ email: user.email }, { rooms: newRooms }, (error) => {
+  //     if (error)
+  //       console.log(error.message)
+  //   })
+
+  // })
+
+  // socket.on('message', ({ message, room }) => {
+  //   console.log(`${message.by.name}: ${message.text} to ${room.name}`)
+  //   new Message(message).save()
+  //   message.createdAt = new Date()
+  //   io.to(room.name).emit('message', message)
+  // })
+
 
 })
 
@@ -189,6 +183,7 @@ async function connectMongodb() {
     await mongoose.connect(MONGODB_URL, options);
     console.log('Connect Mongodb successfully');
   } catch (error) {
+    console.log(error.message)
     console.log('Connect Mongodb fail');
   }
 }

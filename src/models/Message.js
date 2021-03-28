@@ -3,7 +3,8 @@ const Schema = mongoose.Schema;
 
 const Message = new Schema(
   {
-    room: String,
+    room: Schema.Types.Mixed,
+    roomName: String,
     by: Schema.Types.Mixed,
     text: String,
   },
