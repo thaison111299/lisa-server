@@ -23,145 +23,62 @@ const io = socketio(server, {
 
 app.use(cors())
 
+// them catch cho primise
 io.on('connection', socket => {
   console.log('New connection:', socket.id)
-  socket.on('start app', async user => {
-    console.log(`${User.nickname} starts app`)
-    // save user to db
-    let userFound = await User.findOne({ email: user.email }).then(user => user).catch(error => null)
-    if (!userFound)
+
+
+  socket.on('user', async user => {
+    const { nickname } = user
+    socket.join(nickname) // Join user to name's room
+    // If this user not in db => save and emit 'new user' event to all clients except this guy
+    let userFound = await User.findOne({ nickname }).then(user => user)
+
+    if (!userFound) {
       new User(user).save()
+      socket.broadcast.emit('new user', user)
+    }
 
-    // send all user ib db exept they
-    let usersFound = await User.find({}).then(users => users).catch(error => [])
-    usersFound = usersFound.filter(u => u.email !== user.email)
-    socket.emit('send users', usersFound)
+    let userListFound = await User.find({})
+      .then(users => users.filter(dbUser => dbUser.nickname !== user.nickname))
 
+    socket.emit('user list', userListFound)
 
-    // room 
-    let rooms = await Room.find({}).then(rooms => rooms).catch(error => [])
-    let matchRooms = rooms.filter(room => room.name.includes(user.nickname))
-    socket.emit('rooms', matchRooms)
+    let roomListFound = await Room.find({}).then(rooms => rooms).catch(error => [])
+    socket.emit('room list', roomListFound)
+
 
   })
 
-  socket.on('create room', async room => {
-    let roomFound = await Room.findOne({ name: room.name }).then(room => room).catch(error => null)
-    if (!roomFound)
-      new Room(room).save()
-  })
-
-  socket.on('start chat', room => {
-    socket.rooms.forEach(roomName => {
-      if (roomName !== socket.id)
-        socket.leave(roomName)
+  socket.on('room', async ({ room, nickname }) => {
+    let roomFound = await Room.findOne({ name: room.name }).then(room => room)
+    if (!roomFound) new Room(room).save()
+    // Leave previous rooms    
+    socket.rooms.forEach(r => {
+      if (r !== socket.id && r !== nickname)
+        socket.leave(r)
     })
+    // Join new room
     socket.join(room.name)
-    // give messages
-    // console.log(room)
-    Message.find({ roomName: room.name }).then(messages => {
-      socket.emit('messages', messages)
-    }).catch(err => { })
+
+    // Get all messages of that room name, message= {roomName}
+    let messageListFound = await Message.find({ roomName: room.name }).then(messages => messages) // List 
+    socket.emit('message list', messageListFound)
   })
 
   socket.on('message', message => {
-    let { roomName } = message
-    io.to(roomName).emit('message', message)
     new Message(message).save()
+    // io.to(message.roomName).emit('message', { ...message, createdAt: new Date() })
+
+    message.roomName.split(' and ').forEach(nn => io.to(nn).emit('message', { ...message, createdAt: new Date() }))
   })
 
-
-  // socket.on('get inboxs', async user => {
-  //   console.log('Get inboxs')
-  //   let rooms = await User.findOne({ email: user.email })
-  //     .then(user => user.rooms)
-  //     .catch(error => {
-  //       console.log(error.message)
-  //       return []
-  //     })
-  //   let messages = []
-
-  //   for (let room of rooms) {
-  //     let latestMessage = await Message.findOne({ roomName: room.name })
-  //       .sort({ createdAt: -1 }).then(message => message).catch(error => null)
-  //     if (latestMessage) {
-  //       // console.log(latestMessage)
-  //       messages.push(latestMessage)
-  //     }
-  //   }
-  //   socket.emit('inboxs', messages)
-  //   // console.log(messages)
-
-  // })
-
-
-  // // start app thi gui list user 
-  // socket.on('start', user => {
-  //   console.log('Some one start app')
-  //   User.find({})
-  //     .then(users => {
-  //       users = users.filter(guy => guy.email !== user.email)
-  //       socket.emit('users', users)
-  //     })
-  //     .catch(error => { })
-  // })
-
-  // socket.on('login', async user => {
-  //   console.log('some one login')
-  //   let userFound = await User.findOne({ email: user.email })
-  //     .then(user => user).catch(error => null)
-
-  //   if (!userFound) {
-  //     new User(user).save()
-  //       .then(() => {
-  //         User.find({})
-  //           .then(users => {
-  //             console.log(`emitting Users event...`)
-  //             socket.broadcast.emit('users', users)
-  //           })
-  //           .catch(error => { })
-  //       })
-  //       .catch(error => { })
-  //   }
-  // })
-
-  // socket.on('join', roomName => {
-  //   socket.rooms.forEach(roomName => {
-  //     if (roomName !== socket.id) {
-  //       socket.leave(roomName)
-  //     }
-  //   });
-  //   socket.join(roomName)
-  //   Message.find({ roomName: roomName })
-  //     .then(messages => socket.emit('messages', messages))
-  //     .catch(error => { })
-  // })
-
-  // socket.on('update user', async ({ user, room }) => {
-  //   console.log(user.name, room.name)
-  //   let userFound = await User.findOne({ email: user.email })
-  //     .then(user => user)
-  //     .catch(error => null)
-  //   if (!userFound)
-  //     return
-  //   let rooms = userFound.rooms
-  //   let newRooms = rooms.filter(r => r.name !== room.name)
-  //   newRooms = [room, ...newRooms]
-  //   User.updateOne({ email: user.email }, { rooms: newRooms }, (error) => {
-  //     if (error)
-  //       console.log(error.message)
-  //   })
-
-  // })
-
-  // socket.on('message', ({ message, room }) => {
-  //   console.log(`${message.by.name}: ${message.text} to ${room.name}`)
-  //   new Message(message).save()
-  //   message.createdAt = new Date()
-  //   io.to(room.name).emit('message', message)
-  // })
-
-
+  socket.on('get room', async roomName => {
+    let roomFound = await Room.findOne({ name: roomName })
+      .then(room => room).
+      catch(error => null)
+    if (roomFound) socket.emit('room', roomFound)
+  })
 })
 
 

@@ -6,7 +6,8 @@ const Room = new Schema(
   {
     by: Schema.Types.Mixed,
     name: String,
-    picture: String,
+    memberNames: [{ type: String }],
+    memberPictures: [{ type: String }]
   },
   {
     timestamps: true,

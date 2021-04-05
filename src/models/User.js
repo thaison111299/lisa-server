@@ -7,6 +7,7 @@ const User = new Schema(
     name: String,
     nickname: String,
     picture: String,
+    messages: [{ type: Schema.Types.Mixed}],
   },
   {
     timestamps: true,
