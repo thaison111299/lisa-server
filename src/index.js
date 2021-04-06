@@ -1,4 +1,5 @@
 const express = require('express')
+
 const http = require('http')
 const socketio = require('socket.io')
 const cors = require('cors')
@@ -14,6 +15,7 @@ const PORT = process.env.PORT || 1000 // socket.io
 
 let origin = 'https://lisa-64f51.web.app/' //'http://localhost:3000'
 
+
 const io = socketio(server, {
   cors: {
     origin,
@@ -21,8 +23,14 @@ const io = socketio(server, {
   }
 })
 
+
+
 app.use(cors())
 
+app.get('/', (req, res) => {
+  console.log('Get /')
+  res.send('LISA CHAT')
+})
 // them catch cho primise
 io.on('connection', socket => {
   console.log('New connection:', socket.id)
