@@ -12,7 +12,7 @@ const server = http.createServer(app)
 
 const PORT = process.env.PORT || 1000 // socket.io
 
-let origin = 'http://localhost:3000'  //'https://lisa-64f51.web.app'
+let origin = 'https://lisa-64f51.web.app' //'http://localhost:3000' 
 
 const io = socketio(server, {
   cors: {
