@@ -25,7 +25,7 @@ const io = socketio(server, {
 
 
 
-app.use(cors())
+app.use(cors({ origin: origin }))
 
 app.get('/', (req, res) => {
   console.log('Get /')
